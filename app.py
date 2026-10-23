@@ -19,41 +19,67 @@ if "evaluations" not in st.session_state:
 
 # --- Sidebar: Saved Lectures & Input ---
 with st.sidebar:
-    st.title("🎓 Revision Companion")
+    st.title("🎓 RevisionBuddy")
     st.caption("Turn any lecture video into exam Q&As, model answers, and timestamped explanations.")
 
-    youtube_url = st.text_input("Paste YouTube Lecture URL:", placeholder="https://www.youtube.com/watch?v=...")
+    input_mode = st.radio("Input Method:", ["YouTube URL", "Paste Transcript Text"])
+
+    transcript_text_input = ""
+    youtube_url = ""
+    video_id_input = "local_lecture"
+
+    if input_mode == "YouTube URL":
+        youtube_url = st.text_input("Paste YouTube Lecture URL:", placeholder="https://www.youtube.com/watch?v=...")
+    else:
+        video_id_input = st.text_input("Lecture ID / Name:", value="lecture_custom")
+        transcript_text_input = st.text_area("Paste Transcript / Notes Text:", placeholder="Paste the lecture transcript or notes here...")
+
     force_regen = st.checkbox("Force re-generate (ignore cache)", value=False)
 
     if st.button("🚀 Generate Revision Pack", type="primary", use_container_width=True):
-        if not youtube_url:
-            st.warning("Please paste a YouTube URL first.")
-        else:
-            try:
+        try:
+            st.session_state.evaluations = {}
+            
+            if input_mode == "YouTube URL":
+                if not youtube_url:
+                    st.warning("Please paste a YouTube URL first.")
+                    st.stop()
                 vid = extract_video_id(youtube_url)
                 st.session_state.video_id = vid
                 st.session_state.video_start_sec = 0
-                st.session_state.evaluations = {}
 
                 cached = None if force_regen else load_lecture_pack(vid)
                 if cached:
                     st.session_state.current_pack = cached
                     st.success("Loaded instantly from your saved revision history!")
                 else:
-                    with st.spinner("1/2 Extracting timestamped transcript..."):
+                    with st.spinner("Extracting timestamped transcript..."):
                         transcript = fetch_timestamped_transcript(vid)
-                    with st.spinner("2/2 Professor AI is preparing exam questions & model answers..."):
+                    with st.spinner("RevisionBuddy is preparing exam questions & model answers..."):
                         pack = generate_revision_pack(transcript)
                         save_lecture_pack(vid, pack)
                         st.session_state.current_pack = pack
                     st.success("Revision Pack Ready!")
-            except Exception as e:
-                st.error(f"Error: {e}")
+            else:
+                if not transcript_text_input.strip():
+                    st.warning("Please paste some transcript text first.")
+                    st.stop()
+                st.session_state.video_id = video_id_input
+                st.session_state.video_start_sec = 0
+                with st.spinner("RevisionBuddy is generating exam questions from your text..."):
+                    pack = generate_revision_pack(transcript_text_input)
+                    save_lecture_pack(video_id_input, pack)
+                    st.session_state.current_pack = pack
+                st.success("Revision Pack Ready!")
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+            st.info("💡 **Tip:** YouTube blocks cloud server IPs. Switch the **Input Method** above to **'Paste Transcript Text'** to generate revision packs instantly without any limits!")
 
     st.divider()
     st.subheader("📚 Saved Lectures")
     for saved_vid, saved_title in list_saved_lectures():
-        if st.button(f"📖 {saved_title[:32]}...", key=f"hist_{saved_vid}", use_container_width=True):
+        if st.button(f"📼 {saved_title[:32]}...", key=f"hist_{saved_vid}", use_container_width=True):
             st.session_state.video_id = saved_vid
             st.session_state.current_pack = load_lecture_pack(saved_vid)
             st.session_state.video_start_sec = 0

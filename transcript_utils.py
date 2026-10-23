@@ -1,5 +1,5 @@
 import re
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 
 def extract_video_id(url_or_id: str) -> str:
     """Extracts the 11-character YouTube video ID from any standard YouTube URL."""
@@ -19,21 +19,25 @@ def extract_video_id(url_or_id: str) -> str:
     raise ValueError("Invalid YouTube URL. Please paste a valid YouTube video link.")
 
 def fetch_timestamped_transcript(video_id: str) -> str:
-    """Fetches English transcript (manual or auto-generated) with MM:SS and seconds."""
-    ytt_api = YouTubeTranscriptApi()
+    """Fetches English transcript with MM:SS and seconds, handling cloud blocks gracefully."""
     try:
-        # Compatible with latest youtube-transcript-api versions
-        fetched = ytt_api.fetch(video_id, languages=['en', 'en-US', 'en-IN', 'hi'])
-        raw_entries = fetched.to_raw_data()
-    except AttributeError:
-        # Fallback for older versions of youtube-transcript-api
-        raw_entries = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'en-IN', 'hi'])
+        ytt_api = YouTubeTranscriptApi()
+        try:
+            fetched = ytt_api.fetch(video_id, languages=['en', 'en-US', 'en-IN', 'hi'])
+            raw_entries = fetched.to_raw_data()
+        except AttributeError:
+            raw_entries = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'en-US', 'en-IN', 'hi'])
 
-    lines = []
-    for item in raw_entries:
-        start_sec = int(item["start"])
-        mins, secs = divmod(start_sec, 60)
-        text = item["text"].replace("\n", " ").strip()
-        lines.append(f"[{mins:02d}:{secs:02d} ({start_sec}s)] {text}")
+        lines = []
+        for item in raw_entries:
+            start_sec = int(item["start"])
+            mins, secs = divmod(start_sec, 60)
+            text = item["text"].replace("\n", " ").strip()
+            lines.append(f"[{mins:02d}:{secs:02d} ({start_sec}s)] {text}")
 
-    return "\n".join(lines)
+        return "\n".join(lines)
+    except Exception as e:
+        raise RuntimeError(
+            f"YouTube blocked this cloud server IP ({str(e)}). "
+            "Please use the 'Manual Transcript Paste' option below!"
+        )
